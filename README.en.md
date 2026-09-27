@@ -2,12 +2,12 @@
 
 [![Bash](https://img.shields.io/badge/Bash-5%2B-4EAA25?logo=gnubash&logoColor=white)](https://www.gnu.org/software/bash/)
 [![Debian](https://img.shields.io/badge/Debian-XFCE-A81D33?logo=debian&logoColor=white)](https://www.debian.org/)
-[![Status](https://img.shields.io/badge/status-active-success)](#)
-[![Shell](https://img.shields.io/badge/type-shell%20script-blue)](#)
+![Status](https://img.shields.io/badge/status-active-success)
+![Type](https://img.shields.io/badge/type-shell%20script-blue)
 
 > **Language:** [Português](README.md) | English
 
-Interactive script for preparing and configuring a Debian XFCE environment, focused on a simple, repeatable and reviewable setup process.
+Interactive script for preparing and configuring a Debian XFCE environment through a simple, repeatable, and reviewable setup process.
 
 The project uses `whiptail` to provide a terminal menu and lets the user choose exactly which tools or settings should be applied.
 
@@ -21,7 +21,7 @@ The project uses `whiptail` to provide a terminal menu and lets the user choose 
 - [4. Installation and execution](#4-installation-and-execution)
 - [5. Usage](#5-usage)
 - [6. Available options](#6-available-options)
-- [7. Detection of existing software](#7-detection-of-existing-software)
+- [7. Software and configuration detection](#7-software-and-configuration-detection)
 - [8. Important behavior](#8-important-behavior)
 - [9. Project structure](#9-project-structure)
 - [10. Validation](#10-validation)
@@ -34,14 +34,16 @@ The project uses `whiptail` to provide a terminal menu and lets the user choose 
 
 `Debian XFCE Setup` automates common tasks after installing Debian with XFCE.
 
-Its goal is to replace a long sequence of manual commands with a single script that can handle:
+Its purpose is to replace a long sequence of manual commands with a single script that can handle:
 
 - system updates;
 - development tools;
 - desktop applications;
+- Docker installation and detection;
 - Zsh and Oh My Zsh;
 - Inter font configuration in XFCE;
 - timezone and NTP configuration;
+- an optional fix for keyboards that cannot correctly produce `\` and `|` under X11/XFCE;
 - audio and microphone guidance.
 
 The script is designed specifically for **Debian** and stops when executed on another distribution.
@@ -56,11 +58,40 @@ The script is designed specifically for **Debian** and stops when executed on an
 - current installation/configuration status in the menu;
 - task-aware error reporting;
 - `sudo` authentication only when an administrative task actually needs it;
-- automatic `whiptail` installation when missing;
+- automatic `whiptail` installation when needed;
 - IntelliJ detection through JetBrains Toolbox;
+- Docker installation through Docker's official repository;
+- persistent and reversible keycode 77 mapping for `\` and `|` under X11/XFCE;
 - preservation of the current font size when XFCE already uses Inter;
 - scrollable long help dialogs;
-- menu sized for terminals around `80x24`.
+- menu usable in terminals around `80x24`.
+
+### 2.1 Installed or managed tools
+
+[![Java](https://img.shields.io/badge/Java-default--jdk-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![Maven](https://img.shields.io/badge/Apache_Maven-APT-C71A36?logo=apachemaven&logoColor=white)](https://maven.apache.org/)
+[![Git](https://img.shields.io/badge/Git-APT-F05032?logo=git&logoColor=white)](https://git-scm.com/)
+[![VS Code](https://img.shields.io/badge/Visual_Studio_Code-Microsoft-007ACC?logo=visualstudiocode&logoColor=white)](https://code.visualstudio.com/)
+[![IntelliJ IDEA](https://img.shields.io/badge/IntelliJ_IDEA-JetBrains-000000?logo=intellijidea&logoColor=white)](https://www.jetbrains.com/idea/)
+[![KeePassXC](https://img.shields.io/badge/KeePassXC-APT-6CAC4D?logo=keepassxc&logoColor=white)](https://keepassxc.org/)
+[![Zsh](https://img.shields.io/badge/Zsh-Shell-F15A24?logo=zsh&logoColor=white)](https://www.zsh.org/)
+[![Oh My Zsh](https://img.shields.io/badge/Oh_My_Zsh-Framework-1A2C34)](https://ohmyz.sh/)
+[![Docker](https://img.shields.io/badge/Docker-Engine-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Docker Compose](https://img.shields.io/badge/Docker_Compose-Plugin-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![Docker Buildx](https://img.shields.io/badge/Docker_Buildx-Plugin-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/build/buildx/)
+[![Whiptail](https://img.shields.io/badge/whiptail-Terminal_UI-4EAA25?logo=gnubash&logoColor=white)](https://packages.debian.org/search?keywords=whiptail)
+
+### 2.2 Environment configuration and support
+
+[![XFCE](https://img.shields.io/badge/XFCE-Desktop-2284F2?logo=xfce&logoColor=white)](https://www.xfce.org/)
+[![Inter](https://img.shields.io/badge/Inter-Font-111111)](https://rsms.me/inter/)
+[![systemd](https://img.shields.io/badge/systemd-timesyncd-000000?logo=systemd&logoColor=white)](https://systemd.io/)
+[![Timezone](https://img.shields.io/badge/Timezone-America%2FSao__Paulo-555555)](#66-timezone-and-ntp)
+[![X11](https://img.shields.io/badge/X11-xmodmap-F28834)](#68-keyboard-backslash-and-pipe)
+[![Keycode 77](https://img.shields.io/badge/Keycode_77-Num_Lock_%E2%86%92_%5C_%7C-555555)](#68-keyboard-backslash-and-pipe)
+[![ALSA](https://img.shields.io/badge/ALSA-alsamixer-6A5ACD)](#69-audio-and-microphone)
+
+The badges provide a quick visual overview only. The behavior of each option is documented in text below.
 
 ---
 
@@ -73,10 +104,11 @@ The script expects:
 - Bash;
 - internet access for downloads and package installation;
 - configured `sudo` access for administrative tasks;
-- XFCE for font configuration;
+- XFCE for desktop-specific configuration;
+- X11/XFCE for the optional keyboard fix using `xmodmap`;
 - `systemd`/`timedatectl` for timezone and NTP configuration.
 
-> **Note:** run the script as a normal user. Do not execute it with `sudo ./setup.sh`.
+> **Note:** run the script as a normal user. Do not use `sudo ./setup.sh`.
 
 ---
 
@@ -117,14 +149,14 @@ The menu uses a `whiptail` checklist.
 The menu can display states such as:
 
 ```text
-[INSTALLED]
-[NOT INSTALLED]
-[CONFIGURED]
-[PENDING]
-[UNAVAILABLE]
+[INSTALADO]
+[NÃO INSTALADO]
+[CONFIGURADO]
+[PENDENTE]
+[INDISPONÍVEL]
 ```
 
-The actual script currently uses Portuguese status labels in the terminal interface.
+The terminal interface currently uses Portuguese status labels.
 
 ---
 
@@ -143,6 +175,8 @@ The actual script currently uses Portuguese status labels in the terminal interf
 | `ZSH` | Installs Zsh and Oh My Zsh |
 | `FONT` | Installs and configures the Inter font in XFCE |
 | `TIME` | Configures timezone and NTP synchronization |
+| `DOCKER` | Detects or installs Docker Engine from Docker's official repository |
+| `KEYBOARD` | Fixes backslash and pipe using the Num Lock key (keycode 77) under X11/XFCE |
 | `AUDIO` | Shows audio and microphone configuration guidance |
 
 ### 6.1 Java
@@ -208,7 +242,7 @@ curl
 git
 ```
 
-and then installs Oh My Zsh when needed.
+and installs Oh My Zsh when needed.
 
 A valid installation requires:
 
@@ -224,7 +258,7 @@ The registered login shell is checked through `getent passwd` before `chsh` is u
 
 The status is considered configured when:
 
-- `fonts-inter` is actually installed;
+- `fonts-inter` is installed;
 - XFCE is using a font whose name starts with `Inter`.
 
 Accepted examples:
@@ -248,7 +282,7 @@ The XFCE property is:
 
 ### 6.6 Timezone and NTP
 
-The setup currently configures:
+The setup configures:
 
 ```text
 America/Sao_Paulo
@@ -262,7 +296,87 @@ systemd-timesyncd
 
 for time synchronization.
 
-### 6.7 Audio and microphone
+### 6.7 Docker
+
+The `DOCKER` option considers Docker installed when the `docker` command is available in `PATH`.
+
+If Docker is already installed, the script does not reinstall it: it prints `docker --version` and, when available, `docker compose version`.
+
+If Docker is not installed yet, the script uses the **official Docker APT repository for Debian** and installs:
+
+```text
+docker-ce
+docker-ce-cli
+containerd.io
+docker-buildx-plugin
+docker-compose-plugin
+```
+
+Before installation, the script checks for packages known to conflict with Docker's official packages. If a conflict is found, the Docker task stops without removing anything automatically.
+
+The installation also:
+
+- detects the architecture with `dpkg --print-architecture`;
+- uses `/etc/apt/keyrings/docker.asc`;
+- creates `/etc/apt/sources.list.d/docker.sources`;
+- enables and starts the `docker` service when `systemd` is available;
+- validates `docker --version` and `docker compose version`;
+- does not run `docker run hello-world`;
+- **does not automatically add the user to the `docker` group**.
+
+If access to the daemon requires privileges, use `sudo docker ...`.
+
+### 6.8 Keyboard: backslash and pipe
+
+Some keyboards or layouts under X11/XFCE may not allow these characters to be typed correctly:
+
+```text
+\  backslash
+|  pipe
+```
+
+The `KEYBOARD` option provides a specific workaround by repurposing the **Num Lock** key, which corresponds to **keycode 77**.
+
+While this configuration is active:
+
+```text
+Num Lock          -> \
+Shift + Num Lock  -> |
+```
+
+> **Important:** the Num Lock key stops working as Num Lock while this configuration is active.
+
+The change is persisted in project-owned files:
+
+```text
+~/.config/debian-xfce-setup/keycode77.xmodmap
+~/.config/autostart/debian-xfce-setup-keyboard.desktop
+```
+
+The autostart reapplies the configuration on new XFCE logins. In the current session, the script checks the X11 keymap before reapplying the change: if keycode 77 is already correct, the task succeeds without repeating an unnecessary operation.
+
+If `xmodmap` is missing, the option can install Debian's:
+
+```text
+x11-xserver-utils
+```
+
+In that case, and only in that case within the `KEYBOARD` task, `sudo` is required.
+
+Before changing anything, the script displays a confirmation explaining the effect on Num Lock, the files that will be created, and how to undo the configuration.
+
+To remove the configuration manually:
+
+```bash
+rm ~/.config/debian-xfce-setup/keycode77.xmodmap
+rm ~/.config/autostart/debian-xfce-setup-keyboard.desktop
+```
+
+Then log out and log back in. On the next login, this change will no longer be applied.
+
+> **Limit:** this fix is specific to X11/XFCE. The script does not attempt to adapt this remapping to Wayland.
+
+### 6.9 Audio and microphone
 
 The `AUDIO` option does not modify the system and does not require `sudo`.
 
@@ -285,18 +399,22 @@ If `alsamixer` is missing, the script explains that it is provided by the `alsa-
 
 ---
 
-## 7. Detection of existing software
+## 7. Software and configuration detection
 
-Statuses displayed in the menu are informational.
+Statuses shown in the menu are informational and are calculated before task selection.
 
-Some tasks explicitly detect existing installations and skip installation when possible, including:
+Some options explicitly detect existing software or configuration to avoid unnecessary work:
 
-- VS Code;
-- IntelliJ IDEA.
+- Java checks for `javac`;
+- VS Code checks for `code`;
+- IntelliJ recognizes JetBrains Toolbox, `idea` in `PATH`, and `/opt/intellij`;
+- Docker checks for `docker` in `PATH`;
+- Zsh checks Zsh and the Oh My Zsh installation;
+- font configuration checks the Inter package and the current XFCE property;
+- timezone checks `America/Sao_Paulo` and NTP;
+- keyboard configuration checks the two persistent files managed by the project.
 
-Other tasks still use APT normally. Selecting an already installed package is safe: Debian simply reports that it is already at the newest version.
-
-The `ALL` option includes every task even if some are already shown as installed or configured.
+The `ALL` option includes every task even when some are already shown as installed or configured. Each task keeps its own installation or reapplication logic.
 
 ---
 
@@ -308,7 +426,11 @@ The script must not be started as root.
 
 It requests `sudo` only when at least one selected task requires administrative access.
 
-Selecting only `AUDIO` should not request an administrative password.
+Important cases:
+
+- `AUDIO` does not require `sudo`;
+- `DOCKER` does not request `sudo` merely to display versions when Docker is already installed;
+- `KEYBOARD` only needs `sudo` when `xmodmap` must be installed through `x11-xserver-utils`.
 
 ### Errors
 
@@ -320,13 +442,17 @@ set -Eeuo pipefail
 
 and tracks the current task.
 
-A real failure stops execution and prints a message similar to:
+A real failure normally stops execution and prints a message similar to:
 
 ```text
 ERROR: TASK_NAME failed at line X (code Y). Setup interrupted.
 ```
 
 The current implementation prints this message in Portuguese.
+
+The `DOCKER` task is isolated: if it fails, the script records the failure, continues the remaining selected tasks, and exits with an error status at the end.
+
+For keyboard configuration, the final state of keycode 77 is validated. An intermediate command is not treated as a definitive failure when the session has already reached the desired state.
 
 ### Whiptail
 
@@ -344,7 +470,7 @@ sudo apt install -y whiptail
 Minimal structure:
 
 ```text
-script-debian-xfce/
+debian-xfce-setup/
 ├── setup.sh
 ├── README.md
 └── README.en.md
@@ -360,7 +486,7 @@ setup.sh
 
 ## 10. Validation
 
-Before publishing changes to the script, run:
+Before publishing changes to the script:
 
 ```bash
 bash -n setup.sh
@@ -379,10 +505,12 @@ AUDIO
 JAVA
 FONT
 INTELLIJ
+DOCKER
+KEYBOARD
 ALL
 ```
 
-and remember that a highlighted menu entry is not selected until `SPACE` is pressed.
+When testing the menu, remember that a highlighted entry is not selected until `SPACE` is pressed.
 
 ---
 
@@ -392,7 +520,10 @@ and remember that a highlighted menu entry is not selected until `SPACE` is pres
 - font configuration requires a working XFCE session;
 - timezone is currently hard-coded to `America/Sao_Paulo`;
 - IntelliJ has explicit support for `amd64` and `arm64`;
-- VS Code has explicit support for `amd64`, `arm64` and `armhf`;
+- VS Code has explicit support for `amd64`, `arm64`, and `armhf`;
+- the `KEYBOARD` fix is specific to X11/XFCE and is not applied under Wayland;
+- `KEYBOARD` repurposes the Num Lock key, which no longer performs its normal function while the configuration is active;
+- the official Docker installation stops when known conflicting packages are found; they are not removed automatically;
 - `AUDIO` only displays guidance and does not automatically configure audio devices;
 - some tasks may run `apt update` even when the requested package is already installed.
 
@@ -404,13 +535,17 @@ The script:
 
 - uses `sudo` to modify packages and system settings;
 - adds Microsoft's official repository for VS Code;
+- adds Docker's official repository when Docker Engine needs to be installed;
 - downloads IntelliJ directly from JetBrains;
 - downloads the official Oh My Zsh installer;
 - can change the default login shell when Zsh is selected;
-- can modify XFCE settings and system timezone.
+- can modify XFCE settings and system timezone;
+- can create an XFCE autostart entry and a project-owned `xmodmap` file for the optional keycode 77 fix;
+- does not automatically remove conflicting packages found by the Docker task;
+- does not automatically add the user to the `docker` group.
 
 > **Recommendation:** review `setup.sh` before running it, especially on production machines or environments with existing custom configuration.
 
 ---
 
-`Debian XFCE Setup` aims to make a Debian XFCE installation faster, more predictable and reproducible without hiding what the script is doing.
+`Debian XFCE Setup` aims to make a Debian XFCE installation faster, more predictable, and reproducible without hiding what the script is doing.
