@@ -113,6 +113,86 @@ status_command() {
 }
 
 
+docker_installed() {
+    command -v docker >/dev/null 2>&1
+}
+
+status_docker() {
+    if docker_installed; then
+        echo "[INSTALADO]"
+    else
+        echo "[NÃO INSTALADO]"
+    fi
+}
+
+keyboard_block() {
+    printf '%s\n' 'remove mod2 = Num_Lock' 'keycode 77 = backslash bar'
+}
+
+keyboard_autostart() {
+    # Desktop Entry não expande $HOME: o shell faz essa expansão no login.
+    cat <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Debian XFCE Setup - Keycode 77
+Exec=sh -c "xmodmap \\"\\$HOME/.config/debian-xfce-setup/keycode77.xmodmap\\""
+OnlyShowIn=XFCE;
+Terminal=false
+X-GNOME-Autostart-enabled=true
+X-debian-xfce-setup=keycode-77
+EOF
+}
+
+status_keyboard() {
+    local map="$HOME/.config/debian-xfce-setup/keycode77.xmodmap"
+    local desktop="$HOME/.config/autostart/debian-xfce-setup-keyboard.desktop"
+    if [[ -f "$map" && -f "$desktop" ]] \
+        && cmp -s <(keyboard_block) "$map" \
+        && cmp -s <(keyboard_autostart) "$desktop"; then
+        echo "[CONFIGURADO]"
+    else
+        echo "[PENDENTE]"
+    fi
+}
+
+keyboard_legacy_pair() {
+    local map="$HOME/.Xmodmap" desktop="$HOME/.config/autostart/xmodmap.desktop"
+    local execution candidate
+    [[ -f "$map" && ! -L "$map" && -f "$desktop" && ! -L "$desktop" ]] || return 1
+    # Remove somente o par reconhecido. Um mapa personalizado precisa de seu
+    # autostart antigo, mesmo quando o comando de carregamento é conhecido.
+    cmp -s <(keyboard_block) <(awk '
+        /^[[:space:]]*([#!]|$)/ { next }
+        { sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); print }
+    ' "$map") || return 1
+    execution="$(awk '
+        /^\[/ { section=$0 }
+        /^Exec=/ {
+            if (section != "[Desktop Entry]") bad=1
+            count++; sub(/^Exec=/, ""); print
+        }
+        END { if (count != 1 || bad) exit 1 }
+    ' "$desktop")" || return 1
+    # Lista estrita: nunca avalia comandos de um arquivo do usuário.
+    while IFS= read -r candidate; do
+        if [[ "$execution" == "$candidate" ]]; then
+            return 0
+        fi
+    done <<'EOF'
+sh -c "xmodmap \\"\\$HOME/.Xmodmap\\""
+sh -c 'xmodmap "$HOME/.Xmodmap"'
+sh -c 'xmodmap ~/.Xmodmap'
+sh -c "xmodmap ~/.Xmodmap"
+EOF
+    [[ "$execution" == "xmodmap \"$HOME/.Xmodmap\"" ]] && return 0
+    # Caminho sem aspas só é inequívoco sem metacaracteres de Desktop Entry.
+    if [[ "$HOME" =~ ^/[a-zA-Z0-9_./-]+$ && "$execution" == "xmodmap $HOME/.Xmodmap" ]]; then
+        return 0
+    fi
+    return 1
+}
+
+
 status_java() {
     if command -v javac >/dev/null 2>&1; then
         echo "[INSTALADO]"
@@ -365,6 +445,179 @@ install_intellij() {
 }
 
 
+install_docker() {
+    echo
+    echo "==> Docker..."
+    if docker_installed; then
+        echo "Docker já está instalado."
+        docker --version || return "$?"
+        if docker compose version >/dev/null 2>&1; then
+            docker compose version || return "$?"
+        fi
+        return 0
+    fi
+
+    local package state architecture
+    local -a conflicts=()
+    for package in docker.io docker-compose docker-doc docker-buildx podman-docker containerd runc; do
+        state="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"
+        if [[ "$state" == installed ]]; then
+            conflicts+=("$package")
+        fi
+    done
+    if (( ${#conflicts[@]} )); then
+        printf 'ERRO: pacotes conflitantes com Docker: %s\n' "${conflicts[*]}" >&2
+        echo "Nenhum pacote foi removido. A tarefa Docker foi interrompida." >&2
+        return 1
+    fi
+    if [[ -z "${VERSION_CODENAME:-}" ]]; then
+        echo "ERRO: VERSION_CODENAME ausente em /etc/os-release." >&2
+        return 1
+    fi
+    architecture="$(dpkg --print-architecture)" || return "$?"
+
+    # Retornos explícitos: esta tarefa é chamada em uma condição para isolar erros.
+    if [[ "$APT_UPDATED" == false ]]; then
+        sudo apt update || return "$?"
+        APT_UPDATED=true
+    fi
+    sudo apt install -y --no-remove ca-certificates curl || return "$?"
+    sudo install -m 0755 -d /etc/apt/keyrings || return "$?"
+    sudo curl -fsSL https://download.docker.com/linux/debian/gpg \
+        -o /etc/apt/keyrings/docker.asc || return "$?"
+    sudo chmod a+r /etc/apt/keyrings/docker.asc || return "$?"
+    sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF || return "$?"
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: $VERSION_CODENAME
+Components: stable
+Architectures: $architecture
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+    sudo apt update || return "$?"
+    APT_UPDATED=true
+    sudo apt install -y --no-remove docker-ce docker-ce-cli containerd.io \
+        docker-buildx-plugin docker-compose-plugin || return "$?"
+    docker --version || return "$?"
+    docker compose version || return "$?"
+    if command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]]; then
+        sudo systemctl enable --now docker || return "$?"
+        sudo systemctl is-active --quiet docker || return "$?"
+    fi
+    echo "Docker instalado. Se o acesso ao daemon exigir privilégios, use sudo docker."
+    return 0
+}
+
+keyboard_runtime_correct() {
+    # Os dois primeiros keysyms são os níveis sem Shift e com Shift.
+    # X11 pode listar níveis/grupos adicionais (inclusive pares repetidos).
+    awk '
+        $1 == "keycode" && $2 == 77 && $3 == "=" {
+            found=1
+            correct=($4 == "backslash" && $5 == "bar")
+        }
+        END { exit !(found && correct) }
+    ' <<< "$1"
+}
+
+apply_keyboard_runtime() {
+    local map="$1" current diagnostic
+    if [[ -z "${DISPLAY:-}" || "${XDG_SESSION_TYPE:-x11}" != x11 \
+        || -n "${WAYLAND_DISPLAY:-}" ]] \
+        || ! current="$(xmodmap -pke 2>/dev/null)"; then
+        echo "Configuração persistida; será aplicada no próximo login compatível com X11/XFCE."
+        return 0
+    fi
+    if keyboard_runtime_correct "$current"; then
+        echo "Configuração do teclado já está aplicada nesta sessão."
+        return 0
+    fi
+
+    # Uma operação intermediária pode falhar mesmo com o keycode correto.
+    # Só a consulta final decide o resultado da aplicação nesta sessão.
+    diagnostic="$(xmodmap "$map" 2>&1)" || true
+    if current="$(xmodmap -pke 2>/dev/null)" \
+        && keyboard_runtime_correct "$current"; then
+        echo "Teclado configurado e aplicado nesta sessão X11."
+        return 0
+    fi
+    echo "ERRO: não foi possível validar o keycode 77 como backslash bar após a aplicação." >&2
+    if [[ -n "$diagnostic" ]]; then
+        printf '%s\n' "$diagnostic" >&2
+    fi
+    return 1
+}
+
+configure_keyboard() {
+    local notice diagnostic code migrate=false
+    local map="$HOME/.config/debian-xfce-setup/keycode77.xmodmap"
+    local desktop="$HOME/.config/autostart/debian-xfce-setup-keyboard.desktop"
+    local migration_notice='Arquivos antigos não reconhecidos serão preservados.'
+    if keyboard_legacy_pair; then
+        migrate=true
+        migration_notice='Legado reconhecido: ~/.Xmodmap e autostart/xmodmap.desktop
+serão removidos e substituídos pela configuração isolada.'
+    fi
+    notice='Alguns teclados/layouts no X11/XFCE não permitem digitar
+barra invertida (\) e pipe (|) corretamente. Esta configuração
+corrige esse problema reaproveitando Num Lock (keycode 77).
+Enquanto ativa, você perde a função normal da tecla Num Lock:
+  Num Lock -> \    Shift + Num Lock -> |
+Ela deixa de funcionar como Num Lock. O autostart mantém
+esta alteração entre logins. Arquivos criados/atualizados:
+~/.config/debian-xfce-setup/keycode77.xmodmap
+~/.config/autostart/debian-xfce-setup-keyboard.desktop
+Para desfazer, execute:
+rm ~/.config/debian-xfce-setup/keycode77.xmodmap
+rm ~/.config/autostart/debian-xfce-setup-keyboard.desktop
+Depois faça logout/login.
+No próximo login, esta alteração deixará de ser aplicada.'
+    notice+=$'\n'"$migration_notice"$'\n\nDeseja aplicar esta configuração?'
+    if diagnostic="$(whiptail --title "Teclado X11 / XFCE" --defaultno \
+        --yesno "$notice" 23 78 3>&1 1>&2 2>&3)"; then
+        :
+    else
+        code="$?"
+        if [[ ( "$code" == 1 || "$code" == 255 ) && -z "$diagnostic" ]]; then
+            echo "Configuração do teclado cancelada."
+            return 0
+        fi
+        handle_dialog_exit "$code" "$diagnostic"
+    fi
+
+    if [[ -L "$map" || ( -e "$map" && ! -f "$map" ) \
+        || -L "$desktop" || ( -e "$desktop" && ! -f "$desktop" ) ]]; then
+        echo "ERRO: destino do teclado é um link ou não é um arquivo regular; preservado." >&2
+        return 1
+    fi
+    if ! command -v xmodmap >/dev/null 2>&1; then
+        require_sudo
+        sudo -v
+        apt_install x11-xserver-utils
+    fi
+
+    if [[ "$(status_keyboard)" == '[CONFIGURADO]' ]]; then
+        echo "A configuração do teclado já existe."
+    else
+        mkdir -p -- "$HOME/.config/debian-xfce-setup" "$HOME/.config/autostart"
+        if ! cmp -s <(keyboard_block) "$map"; then
+            keyboard_block > "$map"
+        fi
+        if ! cmp -s <(keyboard_autostart) "$desktop"; then
+            keyboard_autostart > "$desktop"
+        fi
+    fi
+
+    # Revalida após a confirmação; só remove o legado após persistir os novos arquivos.
+    if [[ "$migrate" == true ]] && keyboard_legacy_pair; then
+        rm -- "$HOME/.config/autostart/xmodmap.desktop" "$HOME/.Xmodmap"
+        echo "Configuração legada migrada para os arquivos exclusivos do projeto."
+    fi
+
+    apply_keyboard_runtime "$map"
+}
+
+
 install_keepassxc() {
     echo
     echo "==> Instalando KeePassXC..."
@@ -581,6 +834,8 @@ KEEPASSXC_STATUS="$(status_command keepassxc)"
 ZSH_STATUS="$(status_zsh)"
 FONT_STATUS="$(status_font)"
 TIME_STATUS="$(status_time)"
+DOCKER_STATUS="$(status_docker)"
+KEYBOARD_STATUS="$(status_keyboard)"
 
 
 # =========================================================
@@ -608,6 +863,8 @@ O estado atual aparece ao lado:" \
         "ZSH"       "Zsh + Oh My Zsh $ZSH_STATUS"                 OFF \
         "FONT"      "Fonte Inter no XFCE $FONT_STATUS"            OFF \
         "TIME"      "Timezone + NTP $TIME_STATUS"                 OFF \
+        "DOCKER"    "Docker $DOCKER_STATUS"                       OFF \
+        "KEYBOARD"  "Corrigir \ e | usando Num Lock (keycode 77) $KEYBOARD_STATUS" OFF \
         "AUDIO"     "Mostrar configuração de áudio/microfone"     OFF \
         3>&1 1>&2 2>&3
 )" || handle_dialog_exit "$?" "$OPTIONS"
@@ -638,6 +895,8 @@ KEEPASSXC
 ZSH
 FONT
 TIME
+DOCKER
+KEYBOARD
 AUDIO
 "
 fi
@@ -672,13 +931,16 @@ CONFIRM_OUTPUT="$(
 # =========================================================
 
 NEEDS_SUDO=false
-for option in UPDATE JAVA MAVEN GIT VSCODE INTELLIJ KEEPASSXC ZSH FONT TIME; do
+for option in UPDATE JAVA MAVEN GIT VSCODE INTELLIJ KEEPASSXC ZSH FONT TIME DOCKER; do
     if selected "$option"; then
         # Estas instalações não fazem alterações quando já estão presentes.
         if [[ "$option" == VSCODE ]] && command -v code >/dev/null 2>&1; then
             continue
         fi
         if [[ "$option" == INTELLIJ ]] && intellij_installed; then
+            continue
+        fi
+        if [[ "$option" == DOCKER ]] && docker_installed; then
             continue
         fi
         NEEDS_SUDO=true
@@ -737,6 +999,21 @@ if selected TIME; then
     CURRENT_TASK=TIME
     configure_time
 fi
+DOCKER_FAILED=false
+if selected DOCKER; then
+    CURRENT_TASK=DOCKER
+    if install_docker; then
+        :
+    else
+        DOCKER_FAILED=true
+        echo "ERRO: tarefa Docker falhou; continuando as demais tarefas." >&2
+    fi
+fi
+if selected KEYBOARD; then
+    CURRENT_TASK=KEYBOARD
+    # O sudo desta tarefa só é solicitado após a confirmação específica.
+    configure_keyboard
+fi
 if selected AUDIO; then
     CURRENT_TASK=AUDIO
     show_audio_help
@@ -747,11 +1024,15 @@ fi
 # FINAL
 # =========================================================
 
+FINAL_STATUS="Setup concluído."
+if [[ "$DOCKER_FAILED" == true ]]; then
+    FINAL_STATUS="Setup concluído com erro na tarefa Docker."
+fi
 CURRENT_TASK="Mensagem final"
 whiptail \
     --title "$TITLE" \
     --msgbox \
-"Setup concluído.
+"$FINAL_STATUS
 
 Você pode executar este script
 novamente quando quiser e marcar
@@ -765,5 +1046,9 @@ fazer logout e login novamente." \
 
 echo
 echo "======================================"
-echo " Setup concluído"
+echo " $FINAL_STATUS"
 echo "======================================"
+
+if [[ "$DOCKER_FAILED" == true ]]; then
+    exit 1
+fi
