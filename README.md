@@ -48,9 +48,9 @@ chmod +x setup.sh
 
 This README is intentionally short.
 
-For installation behavior, task details, managed files, limitations and security notes, see the **[full English documentation](DOCS-en.md)**.
+For installation behavior, task details, managed files, limitations and security notes, see the **[full English documentation](docs/DOCS-en.md)**.
 
-Also available in **[Portuguese](DOCS.md)**.
+Also available in **[Portuguese](docs/DOCS.md)**.
 
 ---
 
